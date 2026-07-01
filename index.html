@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LeaveTrack</title>
+<title>Heliograph Leave System</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -99,6 +99,7 @@ textarea{resize:vertical;min-height:80px}
 .notice.info{background:var(--accent-bg);border-color:#b0ccef;color:#0f4c8e}
 .notice.success{background:var(--success-bg);border-color:#90c8a8;color:#1a5c36}
 .notice.danger{background:var(--danger-bg);border-color:#e8b0b0;color:#8a2020}
+.notice.warn{background:var(--warn-bg);border-color:#e8c078;color:#7a4200}
 .chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .chip{padding:6px 14px;border-radius:20px;border:1px solid var(--border);font-size:12px;cursor:pointer;background:#fff;transition:all .15s;font-weight:500}
 .chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -147,8 +148,9 @@ textarea{resize:vertical;min-height:80px}
   <div class="login-wrap">
     <div class="login-box">
       <div class="login-logo">
-        <div class="login-logo-text">Leave<span>Track</span></div>
-        <div style="font-size:13px;color:#888;margin-top:4px">Company Leave Management System</div>
+        <img src="data:image/png;base64,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" alt="Heliograph" style="max-width:200px;margin-bottom:14px">
+        <div style="font-size:15px;font-weight:700;color:#1a1a18">Heliograph (S.E.A) Pte Ltd</div>
+        <div style="font-size:13px;color:#888;margin-top:4px">Leave Management System</div>
       </div>
       <div class="form-group">
         <label>Work email</label>
@@ -168,7 +170,9 @@ textarea{resize:vertical;min-height:80px}
 <!-- APP -->
 <div class="app" id="app-shell">
   <div class="sidebar">
-    <div class="logo">Leave<span>Track</span></div>
+    <div class="logo" style="display:flex;align-items:center;gap:8px;padding:14px 16px">
+      <img src="data:image/png;base64,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" alt="Heliograph" style="height:24px;width:auto">
+    </div>
     <div class="nav" id="sidebar-nav"></div>
     <div class="user-area">
       <div class="user-chip">
@@ -189,7 +193,7 @@ textarea{resize:vertical;min-height:80px}
       <div class="page-header">
         <div>
           <div class="page-title">Good morning, <span id="dash-name">–</span> 👋</div>
-          <div class="page-sub">Your leave overview for 2025</div>
+          <div class="page-sub">Your leave overview for <span id="dash-year">2025</span></div>
         </div>
         <button class="btn primary" onclick="navTo('apply')">➕ Apply Leave</button>
       </div>
@@ -324,7 +328,10 @@ textarea{resize:vertical;min-height:80px}
           <div class="page-title">Employees</div>
           <div class="page-sub">Manage staff and leave entitlements</div>
         </div>
-        <button class="btn primary" onclick="openModal('modal-add-emp')">➕ Add employee</button>
+        <div style="display:flex;gap:10px">
+          <button class="btn" onclick="openNewYearModal()">🗓️ Start New Year</button>
+          <button class="btn primary" onclick="openModal('modal-add-emp')">➕ Add employee</button>
+        </div>
       </div>
       <div class="card">
         <table><thead><tr><th>Name</th><th>Department</th><th>Role</th><th>Annual (rem/total)</th><th>Medical (rem/total)</th><th>Used</th><th></th></tr></thead>
@@ -418,6 +425,34 @@ textarea{resize:vertical;min-height:80px}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn" onclick="closeModal('modal-edit-bal')">Cancel</button>
       <button class="btn primary" onclick="saveBalance()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Start new year -->
+<div class="modal-backdrop" id="modal-new-year">
+  <div class="modal" style="width:640px">
+    <div class="modal-header"><div class="modal-title">🗓️ Start new leave year</div><button class="close-btn" onclick="closeModal('modal-new-year')">×</button></div>
+    <div class="notice info">ℹ️ &nbsp;This resets annual leave for every employee to a new entitlement, carrying forward up to 50% of unused days. Medical, maternity, paternity, and unpaid leave are not affected. <strong>This cannot be undone.</strong></div>
+    <div class="row">
+      <div class="form-group"><label>New year</label><input type="number" id="ny-year" value=""></div>
+      <div class="form-group"><label>New annual entitlement (days)</label><input type="number" id="ny-entitlement" value="14" min="0"></div>
+    </div>
+    <div class="form-group">
+      <label>Max carry-forward (% of entitlement)</label>
+      <input type="number" id="ny-carry-pct" value="50" min="0" max="100">
+    </div>
+    <button class="btn" style="margin-bottom:14px" onclick="previewNewYear()">👀 Preview changes</button>
+    <div id="ny-preview" style="display:none">
+      <div class="notice warn" id="ny-forfeit-summary" style="margin-bottom:12px"></div>
+      <div class="card" style="background:#fafaf8;max-height:280px;overflow-y:auto;padding:0">
+        <table><thead><tr><th>Employee</th><th>Unused</th><th>Carried forward</th><th>Forfeited</th><th>New balance</th></tr></thead>
+        <tbody id="ny-preview-body"></tbody></table>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeModal('modal-new-year')">Cancel</button>
+        <button class="btn primary" id="ny-confirm-btn" onclick="confirmNewYear()">✅ Confirm & apply to all employees</button>
+      </div>
     </div>
   </div>
 </div>
@@ -578,6 +613,7 @@ async function render(id) {
 // ══ DASHBOARD ═══════════════════════════════════════════════
 function renderDashboard() {
   document.getElementById('dash-name').textContent = currentProfile.name.split(' ')[0];
+  document.getElementById('dash-year').textContent = new Date().getFullYear();
   const myBalances = allBalances.filter(b => b.user_id === currentProfile.id);
   const types = [
     {key:'annual',label:'Annual leave',color:'#1e6fdb'},
@@ -864,6 +900,51 @@ async function saveBalance(){
   if(annual) await sb.from('leave_balances').update({total_days:+document.getElementById('eb-a-total').value,used_days:+document.getElementById('eb-a-used').value}).eq('id',annual.id);
   if(medical) await sb.from('leave_balances').update({total_days:+document.getElementById('eb-m-total').value,used_days:+document.getElementById('eb-m-used').value}).eq('id',medical.id);
   await loadAllData(); closeModal('modal-edit-bal'); renderEmployees(); showToast('Balance updated.');
+}
+
+// ══ START NEW YEAR (annual leave rollover with carry-forward cap) ══════
+let newYearPlan = [];
+function openNewYearModal(){
+  document.getElementById('ny-year').value = new Date().getFullYear() + 1;
+  document.getElementById('ny-preview').style.display = 'none';
+  openModal('modal-new-year');
+}
+function previewNewYear(){
+  const entitlement = +document.getElementById('ny-entitlement').value;
+  const carryPct = +document.getElementById('ny-carry-pct').value;
+  const maxCarry = Math.floor(entitlement * (carryPct/100));
+  newYearPlan = allUsers.map(u => {
+    const bal = allBalances.find(b=>b.user_id===u.id&&b.leave_type==='annual') || {total_days:entitlement,used_days:0};
+    const unused = Math.max(0, bal.total_days - bal.used_days);
+    const carried = Math.min(unused, maxCarry);
+    const forfeited = unused - carried;
+    return { userId:u.id, name:u.name, unused, carried, forfeited, newTotal: entitlement + carried, balanceId: bal.id };
+  });
+  const totalForfeited = newYearPlan.reduce((s,p)=>s+p.forfeited,0);
+  document.getElementById('ny-preview-body').innerHTML = newYearPlan.map(p => `
+    <tr><td>${p.name}</td><td>${p.unused}d</td><td>${p.carried}d</td>
+    <td style="color:${p.forfeited>0?'var(--danger)':'#888'}">${p.forfeited>0?p.forfeited+'d':'–'}</td>
+    <td><strong>${p.newTotal}d</strong></td></tr>
+  `).join('');
+  document.getElementById('ny-forfeit-summary').innerHTML = totalForfeited > 0
+    ? `⚠️ &nbsp;<strong>${totalForfeited} day${totalForfeited!==1?'s':''}</strong> will be forfeited in total across all employees (unused leave above the ${carryPct}% carry-forward cap).`
+    : `✅ &nbsp;No leave will be forfeited — all unused leave is within the carry-forward cap.`;
+  document.getElementById('ny-preview').style.display = 'block';
+}
+async function confirmNewYear(){
+  const year = +document.getElementById('ny-year').value;
+  if(!confirm(`Apply new ${year} annual leave balances to all ${newYearPlan.length} employees? This cannot be undone.`)) return;
+  const btn = document.getElementById('ny-confirm-btn'); btn.disabled = true; btn.textContent = 'Applying...';
+  for (const p of newYearPlan) {
+    if (p.balanceId) {
+      await sb.from('leave_balances').update({ total_days: p.newTotal, used_days: 0, year }).eq('id', p.balanceId);
+    } else {
+      await sb.from('leave_balances').insert({ user_id: p.userId, leave_type: 'annual', total_days: p.newTotal, used_days: 0, year });
+    }
+  }
+  btn.disabled = false; btn.textContent = '✅ Confirm & apply to all employees';
+  await loadAllData(); closeModal('modal-new-year'); renderEmployees();
+  showToast(`New leave year ${year} started for all employees!`);
 }
 
 // ══ REPORTS ═════════════════════════════════════════════════
