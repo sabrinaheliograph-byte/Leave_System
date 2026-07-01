@@ -243,13 +243,20 @@ textarea{resize:vertical;min-height:80px}
           </select>
         </div>
         <div class="form-group">
+          <label>Send approval to</label>
+          <select id="apply-approver">
+            <option value="">– Select approver –</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Reason <span style="color:#aaa;font-weight:400">(optional)</span></label>
-          <textarea id="apply-reason" placeholder="Details for your manager..."></textarea>
+          <textarea id="apply-reason" placeholder="Details for your approver..."></textarea>
         </div>
         <div id="apply-mc-group" style="display:none">
           <div class="form-group">
-            <label>Medical certificate <span style="color:var(--danger);font-weight:400">(required)</span></label>
-            <input type="file" accept=".pdf,.jpg,.png" style="padding:6px">
+            <label>Medical certificate <span style="color:var(--danger);font-weight:400">(required for medical leave)</span></label>
+            <input type="file" id="apply-mc-file" accept=".pdf,.jpg,.jpeg,.png" style="padding:6px">
+            <div style="font-size:12px;color:#888;margin-top:4px">Accepted: PDF, JPG, PNG. Max 5MB.</div>
           </div>
         </div>
         <div class="card" style="background:#fafaf8;margin-bottom:18px;padding:14px">
@@ -277,7 +284,7 @@ textarea{resize:vertical;min-height:80px}
           <div class="chip" onclick="filterMyLeaves('approved',this)">Approved</div>
           <div class="chip" onclick="filterMyLeaves('rejected',this)">Rejected</div>
         </div>
-        <table><thead><tr><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Manager note</th><th></th></tr></thead>
+        <table><thead><tr><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Sent to</th><th>Note</th><th>MC</th><th></th></tr></thead>
         <tbody id="my-leaves-body"></tbody></table>
       </div>
     </div>
@@ -316,7 +323,7 @@ textarea{resize:vertical;min-height:80px}
         <button class="switcher-btn" onclick="filterApprovals('all',this)">All requests</button>
       </div>
       <div class="card">
-        <table><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Reason</th><th>Actions</th></tr></thead>
+        <table><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>Reason</th><th>MC</th><th>Actions</th></tr></thead>
         <tbody id="approvals-body"></tbody></table>
       </div>
     </div>
@@ -606,6 +613,11 @@ async function render(id) {
       document.getElementById('apply-start').value = TODAY;
       document.getElementById('apply-end').value = TODAY;
     }
+    // Populate approvers — managers and HR, excluding self
+    const approvers = allUsers.filter(u => (u.role === 'manager' || u.role === 'hr') && u.id !== currentProfile.id);
+    const sel = document.getElementById('apply-approver');
+    sel.innerHTML = '<option value="">– Select approver –</option>' +
+      approvers.map(u => `<option value="${u.id}">${u.name} (${cap(u.role)} – ${u.department})</option>`).join('');
     updateApplyForm(); calcDays();
   }
 }
@@ -697,28 +709,51 @@ async function submitLeave(){
   const t=document.getElementById('apply-type').value;
   const reason=document.getElementById('apply-reason').value;
   const dur=document.getElementById('apply-duration').value;
+  const approverId=document.getElementById('apply-approver').value;
+  const mcFile=document.getElementById('apply-mc-file')?.files[0];
   if(!s||!e){alert('Please select dates.');return;}
   if(new Date(s)>new Date(e)){alert('End date must be on or after start date.');return;}
+  if(!approverId){alert('Please select who should approve this leave.');return;}
+  if(t==='medical'&&!mcFile){alert('Please attach your medical certificate for medical leave.');return;}
   let days=workdays(s,e); if(dur!=='full') days=0.5;
   if(days===0){alert('No working days in this range.');return;}
   const bal=allBalances.find(b=>b.user_id===currentProfile.id&&b.leave_type===t)||{total_days:0,used_days:0};
   if(bal.total_days<900&&bal.used_days+days>bal.total_days){alert('Insufficient leave balance.');return;}
+  const approver=allUsers.find(u=>u.id===approverId);
   const btn=document.getElementById('submit-btn'); btn.disabled=true; btn.textContent='Submitting...';
-  const {error}=await sb.from('leave_applications').insert({user_id:currentProfile.id,leave_type:t,start_date:s,end_date:e,days,status:'pending',reason});
+  // Upload MC file if provided
+  let mcUrl=null;
+  if(mcFile){
+    const ext=mcFile.name.split('.').pop();
+    const path=`mc/${currentProfile.id}/${Date.now()}.${ext}`;
+    const {data:uploadData,error:uploadErr}=await sb.storage.from('medical-certificates').upload(path,mcFile,{upsert:true});
+    if(uploadErr){
+      btn.disabled=false; btn.textContent='✈️ Submit application';
+      alert('Error uploading MC: '+uploadErr.message+'\n\nPlease make sure your Supabase Storage bucket "medical-certificates" is set up.');
+      return;
+    }
+    const {data:urlData}=sb.storage.from('medical-certificates').getPublicUrl(path);
+    mcUrl=urlData.publicUrl;
+  }
+  const {error}=await sb.from('leave_applications').insert({user_id:currentProfile.id,leave_type:t,start_date:s,end_date:e,days,status:'pending',reason,approver_id:approverId,mc_url:mcUrl});
   btn.disabled=false; btn.textContent='✈️ Submit application';
-  if(error){alert('Error submitting. Please try again.');return;}
+  if(error){alert('Error submitting. Please try again.\n'+error.message);return;}
   if(bal.id) await sb.from('leave_balances').update({used_days:bal.used_days+days}).eq('id',bal.id);
   await loadAllData();
   document.getElementById('confirm-body').innerHTML=`
-    <div class="notice success">✅ &nbsp;Your <strong>${LEAVE_TYPES[t].label}</strong> for <strong>${days} day${days!==1?'s':''}</strong> has been submitted and is pending approval.</div>
+    <div class="notice success">✅ &nbsp;Your <strong>${LEAVE_TYPES[t].label}</strong> for <strong>${days} day${days!==1?'s':''}</strong> has been submitted.</div>
     <div class="info-row"><span class="info-label">Dates</span><span class="info-val">${fmt(s)} – ${fmt(e)}</span></div>
-    <div class="info-row"><span class="info-label">Days</span><span class="info-val">${days}</span></div>`;
+    <div class="info-row"><span class="info-label">Days</span><span class="info-val">${days}</span></div>
+    <div class="info-row"><span class="info-label">Sent to</span><span class="info-val">${approver?approver.name:'–'}</span></div>
+    ${mcUrl?`<div class="info-row"><span class="info-label">MC uploaded</span><span class="info-val">✅ Attached</span></div>`:''}`;
   openModal('modal-confirm'); clearApplyForm(); updateDot();
 }
 function clearApplyForm(){
   document.getElementById('apply-type').selectedIndex=0;
   document.getElementById('apply-duration').selectedIndex=0;
+  document.getElementById('apply-approver').selectedIndex=0;
   ['apply-start','apply-end','apply-reason'].forEach(id=>document.getElementById(id).value='');
+  const mcFile=document.getElementById('apply-mc-file'); if(mcFile) mcFile.value='';
   document.getElementById('apply-mc-group').style.display='none';
   ['days-count','cur-bal','bal-after'].forEach(id=>document.getElementById(id).textContent='–');
 }
@@ -728,14 +763,16 @@ function renderMyLeaves(filter){
   let data=allLeaves.filter(l=>l.user_id===currentProfile.id);
   if(filter!=='all') data=data.filter(l=>l.status===filter);
   document.getElementById('my-leaves-body').innerHTML=data.length
-    ? data.map(l=>`<tr>
+    ? data.map(l=>{const approver=allUsers.find(u=>u.id===l.approver_id);return`<tr>
         <td><span class="badge ${LEAVE_TYPES[l.leave_type]?.badge}">${LEAVE_TYPES[l.leave_type]?.label}</span></td>
         <td>${fmt(l.start_date)}</td><td>${fmt(l.end_date)}</td><td>${l.days}d</td>
         <td><span class="badge ${l.status}">${cap(l.status)}</span></td>
-        <td style="max-width:140px;color:#888">${l.manager_note||'–'}</td>
+        <td style="color:#888;font-size:12px">${approver?approver.name:'–'}</td>
+        <td style="max-width:120px;color:#888">${l.manager_note||'–'}</td>
+        <td>${l.mc_url?`<a href="${l.mc_url}" target="_blank" class="btn sm" style="font-size:11px">📎 View MC</a>`:'–'}</td>
         <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕ Cancel</button>`:''}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📭</div>No ${filter==='all'?'':filter+' '}leaves</div></td></tr>`;
+      </tr>`;}).join('')
+    : `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📭</div>No ${filter==='all'?'':filter+' '}leaves</div></td></tr>`;
 }
 function filterMyLeaves(f,el){document.querySelectorAll('#my-leaves-filter .chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderMyLeaves(f);}
 async function cancelLeave(id,type,days){
@@ -786,7 +823,12 @@ function calMove(dir){calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}if(cal
 // ══ APPROVALS ═══════════════════════════════════════════════
 function renderApprovals(filter){
   approvalsFilter=filter;
-  let data=filter==='pending'?allLeaves.filter(l=>l.status==='pending'):[...allLeaves];
+  // HR sees all requests; managers only see requests assigned to them
+  let data = currentProfile.role === 'hr'
+    ? [...allLeaves]
+    : allLeaves.filter(l => l.approver_id === currentProfile.id);
+  if(filter==='pending') data=data.filter(l=>l.status==='pending');
+  data.sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
   document.getElementById('approvals-body').innerHTML=data.length
     ? data.map(l=>{const u=allUsers.find(u=>u.id===l.user_id);return u?`<tr>
         <td><div style="display:flex;align-items:center;gap:8px"><div class="avatar sm">${u.initials}</div><span style="font-weight:500">${u.name}</span></div></td>
@@ -795,12 +837,13 @@ function renderApprovals(filter){
         <td>${l.days}d</td>
         <td><span class="badge ${l.status}">${cap(l.status)}</span></td>
         <td style="max-width:120px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.reason||'–'}</td>
+        <td>${l.mc_url?`<a href="${l.mc_url}" target="_blank" class="btn sm" style="font-size:11px">📎 MC</a>`:'–'}</td>
         <td><div style="display:flex;gap:6px">${l.status==='pending'
           ?`<button class="btn sm success-btn" onclick="openAction('${l.id}','approve')">✓ Approve</button>
             <button class="btn sm danger-btn" onclick="openAction('${l.id}','reject')">✕ Reject</button>`
           :`<span style="color:#bbb;font-size:12px">${cap(l.status)}</span>`}</div></td>
       </tr>`:'';}).join('')
-    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📬</div>No ${filter==='pending'?'pending ':''}requests</div></td></tr>`;
+    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📬</div>No ${filter==='pending'?'pending ':''}requests assigned to you</div></td></tr>`;
 }
 function filterApprovals(f,el){document.querySelectorAll('.switcher-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderApprovals(f);}
 function openAction(id,action){
