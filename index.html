@@ -67,6 +67,8 @@ tr:hover td{background:#fafaf8}
 .badge.maternity,.badge.paternity{background:#f3e8fe;color:#7c3aed}
 .badge.unpaid{background:#f0f0ec;color:#555}
 .badge.other{background:#fdf0dd;color:#c2780c}
+.badge.childcare{background:#e0f2fe;color:#0891b2}
+.badge.lieu{background:#d1fae5;color:#059669}
 .badge.employee{background:#f0f0ec;color:#444}
 .badge.manager{background:var(--accent-bg);color:var(--accent)}
 .badge.hr{background:var(--success-bg);color:var(--success)}
@@ -197,7 +199,7 @@ textarea{resize:vertical;min-height:80px}
         </div>
         <button class="btn primary" onclick="navTo('apply')">➕ Apply Leave</button>
       </div>
-      <div class="grid-4" id="balance-cards" style="grid-template-columns:repeat(5,1fr)"></div>
+      <div class="grid-4" id="balance-cards" style="grid-template-columns:repeat(6,1fr)"></div>
       <div class="grid-2">
         <div class="card">
           <div class="section-title">Recent applications</div>
@@ -226,8 +228,10 @@ textarea{resize:vertical;min-height:80px}
             <option value="medical">Medical / sick leave</option>
             <option value="maternity">Maternity leave</option>
             <option value="paternity">Paternity leave</option>
+            <option value="childcare">Childcare leave</option>
             <option value="unpaid">Unpaid leave</option>
             <option value="other">Other leave</option>
+            <option value="lieu">Off In Lieu</option>
           </select>
         </div>
         <div class="row">
@@ -314,10 +318,13 @@ textarea{resize:vertical;min-height:80px}
 
     <!-- APPROVALS (Manager/HR) -->
     <div class="page" id="page-approvals">
-      <div class="page-header"><div>
-        <div class="page-title">Leave approvals</div>
-        <div class="page-sub">Review and action team requests</div>
-      </div></div>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Leave approvals</div>
+          <div class="page-sub">Review and action team requests</div>
+        </div>
+        <button class="btn" onclick="openGrantLieu()">🔄 Grant Off In Lieu</button>
+      </div>
       <div class="switcher">
         <button class="switcher-btn active" onclick="filterApprovals('pending',this)">Pending</button>
         <button class="switcher-btn" onclick="filterApprovals('all',this)">All requests</button>
@@ -464,6 +471,52 @@ textarea{resize:vertical;min-height:80px}
   </div>
 </div>
 
+<!-- MODAL: Grant Off In Lieu -->
+<div class="modal-backdrop" id="modal-grant-lieu">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🔄 Grant Off In Lieu</div><button class="close-btn" onclick="closeModal('modal-grant-lieu')">×</button></div>
+    <div class="notice info">ℹ️ &nbsp;Use this when a staff member works on a non-working day and is entitled to a compensatory day off.</div>
+    <div class="form-group">
+      <label>Employee</label>
+      <select id="lieu-employee"></select>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label>Date worked (non-working day)</label>
+        <input type="date" id="lieu-worked-date">
+      </div>
+      <div class="form-group">
+        <label>Days to grant</label>
+        <select id="lieu-days">
+          <option value="0.5">Half day (0.5)</option>
+          <option value="1" selected>Full day (1)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Reason</label>
+      <input type="text" id="lieu-reason" placeholder="e.g. Worked on Sunday 29 Jun for customer handover">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal('modal-grant-lieu')">Cancel</button>
+      <button class="btn primary" id="lieu-grant-btn" onclick="grantLieu()">✅ Grant Off In Lieu</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Edit leave record (HR only) -->
+<div class="modal-backdrop" id="modal-edit-leave">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">✏️ Edit leave record</div><button class="close-btn" onclick="closeModal('modal-edit-leave')">×</button></div>
+    <div id="edit-leave-body"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button class="btn danger-btn" onclick="deleteLeaveRecord()">🗑 Delete record</button>
+      <button class="btn" onclick="closeModal('modal-edit-leave')">Cancel</button>
+      <button class="btn primary" onclick="saveLeaveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ SUPABASE SETUP ══════════════════════════════════════════
 const SUPABASE_URL = 'https://ctmurkwndoeeevevtcgq.supabase.co';
@@ -484,12 +537,14 @@ let editingUserId = null;
 let approvalsFilter = 'pending';
 
 const LEAVE_TYPES = {
-  annual:    { label:'Annual leave',    badge:'annual',    color:'#1e6fdb' },
-  medical:   { label:'Medical leave',   badge:'medical',   color:'#b0296b' },
-  maternity: { label:'Maternity leave', badge:'maternity', color:'#7c3aed' },
-  paternity: { label:'Paternity leave', badge:'paternity', color:'#7c3aed' },
-  unpaid:    { label:'Unpaid leave',    badge:'unpaid',    color:'#555'    },
-  other:     { label:'Other leave',     badge:'other',     color:'#c2780c' },
+  annual:    { label:'Annual leave',     badge:'annual',     color:'#1e6fdb' },
+  medical:   { label:'Medical leave',    badge:'medical',    color:'#b0296b' },
+  maternity: { label:'Maternity leave',  badge:'maternity',  color:'#7c3aed' },
+  paternity: { label:'Paternity leave',  badge:'paternity',  color:'#7c3aed' },
+  childcare: { label:'Childcare leave',  badge:'childcare',  color:'#0891b2' },
+  unpaid:    { label:'Unpaid leave',     badge:'unpaid',     color:'#555'    },
+  other:     { label:'Other leave',      badge:'other',      color:'#c2780c' },
+  lieu:      { label:'Off In Lieu',      badge:'lieu',       color:'#059669' },
 };
 
 // ══ INIT ════════════════════════════════════════════════════
@@ -613,8 +668,8 @@ async function render(id) {
       document.getElementById('apply-start').value = TODAY;
       document.getElementById('apply-end').value = TODAY;
     }
-    // Populate approvers — managers and HR, excluding self
-    const approvers = allUsers.filter(u => (u.role === 'manager' || u.role === 'hr') && u.id !== currentProfile.id);
+    // Populate approvers — only users with can_approve=true, excluding self
+    const approvers = allUsers.filter(u => u.can_approve === true && u.id !== currentProfile.id);
     const sel = document.getElementById('apply-approver');
     sel.innerHTML = '<option value="">– Select approver –</option>' +
       approvers.map(u => `<option value="${u.id}">${u.name} (${cap(u.role)} – ${u.department})</option>`).join('');
@@ -628,11 +683,12 @@ function renderDashboard() {
   document.getElementById('dash-year').textContent = new Date().getFullYear();
   const myBalances = allBalances.filter(b => b.user_id === currentProfile.id);
   const types = [
-    {key:'annual',label:'Annual leave',color:'#1e6fdb'},
-    {key:'medical',label:'Medical leave',color:'#b0296b'},
-    {key:'maternity',label:'Maternity',color:'#7c3aed'},
-    {key:'unpaid',label:'Unpaid leave',color:'#555'},
-    {key:'other',label:'Other leave',color:'#c2780c'},
+    {key:'annual',    label:'Annual leave',    color:'#1e6fdb'},
+    {key:'medical',   label:'Medical leave',   color:'#b0296b'},
+    {key:'childcare', label:'Childcare leave', color:'#0891b2'},
+    {key:'maternity', label:'Maternity',       color:'#7c3aed'},
+    {key:'lieu',      label:'Off In Lieu',     color:'#059669'},
+    {key:'unpaid',    label:'Unpaid leave',    color:'#555'},
   ];
   document.getElementById('balance-cards').innerHTML = types.map(t => {
     const b = myBalances.find(x => x.leave_type === t.key) || {total_days:0,used_days:0};
@@ -770,7 +826,7 @@ function renderMyLeaves(filter){
         <td style="color:#888;font-size:12px">${approver?approver.name:'–'}</td>
         <td style="max-width:120px;color:#888">${l.manager_note||'–'}</td>
         <td>${l.mc_url?`<a href="${l.mc_url}" target="_blank" class="btn sm" style="font-size:11px">📎 View MC</a>`:'–'}</td>
-        <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕ Cancel</button>`:''}</td>
+        <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕ Cancel</button>`:''} ${currentProfile.role==='hr'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</td>
       </tr>`;}).join('')
     : `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📭</div>No ${filter==='all'?'':filter+' '}leaves</div></td></tr>`;
 }
@@ -841,7 +897,8 @@ function renderApprovals(filter){
         <td><div style="display:flex;gap:6px">${l.status==='pending'
           ?`<button class="btn sm success-btn" onclick="openAction('${l.id}','approve')">✓ Approve</button>
             <button class="btn sm danger-btn" onclick="openAction('${l.id}','reject')">✕ Reject</button>`
-          :`<span style="color:#bbb;font-size:12px">${cap(l.status)}</span>`}</div></td>
+          :`<span style="color:#bbb;font-size:12px">${cap(l.status)}</span>`}
+          ${currentProfile.role==='hr'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</div></td>
       </tr>`:'';}).join('')
     : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📬</div>No ${filter==='pending'?'pending ':''}requests assigned to you</div></td></tr>`;
 }
@@ -912,8 +969,10 @@ async function saveEmployee(){
     {user_id:newUser.id,leave_type:'medical',total_days:medDays,used_days:0},
     {user_id:newUser.id,leave_type:'maternity',total_days:60,used_days:0},
     {user_id:newUser.id,leave_type:'paternity',total_days:5,used_days:0},
+    {user_id:newUser.id,leave_type:'childcare',total_days:6,used_days:0},
     {user_id:newUser.id,leave_type:'unpaid',total_days:999,used_days:0},
     {user_id:newUser.id,leave_type:'other',total_days:10,used_days:0},
+    {user_id:newUser.id,leave_type:'lieu',total_days:0,used_days:0},
   ]);
   const {error:authErr}=await sb.auth.admin.inviteUserByEmail(email);
   await loadAllData(); closeModal('modal-add-emp'); renderEmployees();
@@ -1031,6 +1090,115 @@ function renderReports(){
 }
 
 // ══ HELPERS ═════════════════════════════════════════════════
+// ══ GRANT OFF IN LIEU ═══════════════════════════════════════
+function openGrantLieu(){
+  const employees = allUsers.filter(u => u.id !== currentProfile.id);
+  document.getElementById('lieu-employee').innerHTML = employees.map(u =>
+    `<option value="${u.id}">${u.name} (${u.department})</option>`).join('');
+  document.getElementById('lieu-worked-date').value = '';
+  document.getElementById('lieu-reason').value = '';
+  document.getElementById('lieu-days').value = '1';
+  openModal('modal-grant-lieu');
+}
+async function grantLieu(){
+  const userId = document.getElementById('lieu-employee').value;
+  const workedDate = document.getElementById('lieu-worked-date').value;
+  const days = +document.getElementById('lieu-days').value;
+  const reason = document.getElementById('lieu-reason').value;
+  if(!workedDate){alert('Please select the date the employee worked.');return;}
+  if(!reason){alert('Please enter a reason.');return;}
+  const btn = document.getElementById('lieu-grant-btn');
+  btn.disabled = true; btn.textContent = 'Granting...';
+  // Add leave record as approved
+  const {error} = await sb.from('leave_applications').insert({
+    user_id: userId, leave_type: 'lieu', start_date: workedDate,
+    end_date: workedDate, days, status: 'approved',
+    reason, approver_id: currentProfile.id
+  });
+  if(error){btn.disabled=false;btn.textContent='✅ Grant Off In Lieu';alert('Error: '+error.message);return;}
+  // Add to leave balance total (lieu balance grows as it's earned)
+  const bal = allBalances.find(b=>b.user_id===userId&&b.leave_type==='lieu');
+  if(bal) await sb.from('leave_balances').update({total_days: bal.total_days + days}).eq('id', bal.id);
+  else await sb.from('leave_balances').insert({user_id:userId,leave_type:'lieu',total_days:days,used_days:0});
+  await loadAllData();
+  btn.disabled=false; btn.textContent='✅ Grant Off In Lieu';
+  closeModal('modal-grant-lieu');
+  showToast('Off In Lieu granted successfully!');
+}
+
+// ══ EDIT LEAVE RECORD (HR only) ══════════════════════════════
+let editingLeaveId = null;
+function openEditLeave(id){
+  editingLeaveId = id;
+  const l = allLeaves.find(x=>x.id===id);
+  const u = allUsers.find(u=>u.id===l.user_id);
+  document.getElementById('edit-leave-body').innerHTML = `
+    <div class="notice info">ℹ️ &nbsp;Editing leave record for <strong>${u?.name||'Unknown'}</strong></div>
+    <div class="row">
+      <div class="form-group"><label>Leave type</label>
+        <select id="el-type">
+          ${Object.entries(LEAVE_TYPES).map(([k,v])=>`<option value="${k}" ${l.leave_type===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="el-status">
+          <option value="pending" ${l.status==='pending'?'selected':''}>Pending</option>
+          <option value="approved" ${l.status==='approved'?'selected':''}>Approved</option>
+          <option value="rejected" ${l.status==='rejected'?'selected':''}>Rejected</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="form-group"><label>Start date</label><input type="date" id="el-start" value="${l.start_date}"></div>
+      <div class="form-group"><label>End date</label><input type="date" id="el-end" value="${l.end_date}"></div>
+    </div>
+    <div class="row">
+      <div class="form-group"><label>Days</label><input type="number" id="el-days" value="${l.days}" min="0.5" step="0.5"></div>
+      <div class="form-group"><label>Reason</label><input type="text" id="el-reason" value="${l.reason||''}"></div>
+    </div>`;
+  openModal('modal-edit-leave');
+}
+async function saveLeaveEdit(){
+  const l = allLeaves.find(x=>x.id===editingLeaveId);
+  const oldDays = l.days;
+  const oldType = l.leave_type;
+  const newType = document.getElementById('el-type').value;
+  const newStatus = document.getElementById('el-status').value;
+  const newStart = document.getElementById('el-start').value;
+  const newEnd = document.getElementById('el-end').value;
+  const newDays = +document.getElementById('el-days').value;
+  const newReason = document.getElementById('el-reason').value;
+  await sb.from('leave_applications').update({
+    leave_type:newType, status:newStatus,
+    start_date:newStart, end_date:newEnd,
+    days:newDays, reason:newReason
+  }).eq('id', editingLeaveId);
+  // Adjust balance if days or type changed
+  if(oldType === newType){
+    const bal = allBalances.find(b=>b.user_id===l.user_id&&b.leave_type===oldType);
+    if(bal){
+      const diff = newDays - oldDays;
+      await sb.from('leave_balances').update({used_days: Math.max(0, bal.used_days + diff)}).eq('id', bal.id);
+    }
+  }
+  await loadAllData();
+  closeModal('modal-edit-leave');
+  renderMyLeaves('all');
+  showToast('Leave record updated.');
+}
+async function deleteLeaveRecord(){
+  if(!confirm('Permanently delete this leave record? This cannot be undone.')) return;
+  const l = allLeaves.find(x=>x.id===editingLeaveId);
+  // Restore balance
+  const bal = allBalances.find(b=>b.user_id===l.user_id&&b.leave_type===l.leave_type);
+  if(bal&&l.status==='approved') await sb.from('leave_balances').update({used_days:Math.max(0,bal.used_days-l.days)}).eq('id',bal.id);
+  await sb.from('leave_applications').delete().eq('id', editingLeaveId);
+  await loadAllData();
+  closeModal('modal-edit-leave');
+  renderMyLeaves('all');
+  showToast('Leave record deleted.');
+}
+
 function updateDot(){const d=document.getElementById('approval-dot');if(!d)return;const p=allLeaves.filter(l=>l.status==='pending').length;d.style.display=p>0?'block':'none';}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
