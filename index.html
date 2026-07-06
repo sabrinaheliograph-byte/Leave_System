@@ -248,7 +248,7 @@ textarea{resize:vertical;min-height:80px}
         </div>
         <button class="btn primary" onclick="navTo('apply')">➕ Apply Leave</button>
       </div>
-      <div class="grid-4" id="balance-cards" style="grid-template-columns:repeat(6,1fr)"></div>
+      <div id="balance-cards"></div>
       <div class="grid-2">
         <div class="card">
           <div class="section-title">Recent applications</div>
@@ -586,7 +586,7 @@ textarea{resize:vertical;min-height:80px}
 <div class="modal-backdrop" id="modal-ph-credit">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title" id="ph-credit-title">➕ Credit Leave Days</div>
+      <div class="modal-title" id="ph-credit-title">✏️ Edit Annual Leave Balance</div>
       <button class="close-btn" onclick="closeModal('modal-ph-credit')">×</button>
     </div>
     <div class="notice info">ℹ️ &nbsp;Use this to credit additional days — e.g. when a public holiday falls on a Sunday, or to correct a balance.</div>
@@ -797,33 +797,87 @@ function renderDashboard() {
   document.getElementById('dash-name').textContent = currentProfile.name.split(' ')[0];
   document.getElementById('dash-year').textContent = new Date().getFullYear();
   const myBalances = allBalances.filter(b => b.user_id === currentProfile.id);
-  const types = [
-    {key:'annual',    label:'Annual leave',    color:'#1e6fdb'},
-    {key:'medical',   label:'Medical leave',   color:'#b0296b'},
-    {key:'childcare', label:'Childcare leave', color:'#0891b2'},
-    {key:'maternity', label:'Maternity',       color:'#7c3aed'},
+
+  // Main leave types shown to everyone
+  const mainTypes = [
+    {key:'annual',    label:'Annual Leave',    color:'#1e6fdb'},
+    {key:'medical',   label:'Medical Leave',   color:'#b0296b'},
+    {key:'childcare', label:'Childcare Leave', color:'#0891b2'},
     {key:'lieu',      label:'Off In Lieu',     color:'#059669'},
-    {key:'unpaid',    label:'Unpaid leave',    color:'#555'},
   ];
-  document.getElementById('balance-cards').innerHTML = types.map(t => {
+
+  // Build balance as ROWS (mobile-friendly) — clickable to see leave records
+  const balHtml = mainTypes.map(t => {
     const b = myBalances.find(x => x.leave_type === t.key) || {total_days:0,used_days:0,brought_forward:0};
     const isUnlimited = b.total_days >= 900;
     const bf = b.brought_forward || 0;
+    const entitlement = isUnlimited ? '∞' : (b.total_days - bf);
     const rem = isUnlimited ? '∞' : b.total_days - b.used_days;
     const pct = !isUnlimited && b.total_days > 0 ? Math.round(b.used_days/b.total_days*100) : 0;
-    const remColor = !isUnlimited && rem <= 0 ? 'var(--danger)' : !isUnlimited && rem <= 3 ? 'var(--warn)' : t.color;
-    return `<div class="card" style="min-width:0">
-      <div class="stat-label">${t.label}</div>
-      <div class="stat-val" style="color:${remColor}">${rem}${!isUnlimited?'d':''}</div>
-      ${!isUnlimited?`
-      <div style="font-size:11px;color:#888;margin-top:4px">${b.used_days}d used of ${b.total_days}d</div>
-      ${bf>0?`<div style="font-size:11px;color:var(--success);margin-top:2px">↑ ${bf}d B/F from 2025</div>`:''}
-      <div class="stat-bar"><div class="stat-fill" style="width:${pct}%;background:${t.color}"></div></div>`
-      :'<div style="font-size:11px;color:#888;margin-top:4px">No limit</div>'}
+    const remColor = !isUnlimited && rem <= 0 ? 'var(--danger)' : !isUnlimited && rem <= 3 ? '#b06000' : t.color;
+    return `<div class="card" style="margin-bottom:10px;cursor:pointer;transition:box-shadow .15s" 
+      onclick="showMyLeaveType('${t.key}')"
+      onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,.08)'"
+      onmouseout="this.style.boxShadow='none'">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:4px;height:40px;background:${t.color};border-radius:2px;flex-shrink:0"></div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#1a1a18">${t.label}</div>
+            <div style="font-size:12px;color:#888;margin-top:2px">
+              ${bf>0?`<span style="color:var(--success)">↑ ${bf}d B/F</span> + `:''} ${isUnlimited?'No limit':entitlement+'d entitlement'}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+          <div style="text-align:center">
+            <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Used</div>
+            <div style="font-size:16px;font-weight:700;color:var(--danger)">${isUnlimited?'–':b.used_days+'d'}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Balance</div>
+            <div style="font-size:20px;font-weight:800;color:${remColor}">${rem}${!isUnlimited?'d':''}</div>
+          </div>
+          <div style="color:#ccc;font-size:16px">›</div>
+        </div>
+      </div>
+      ${!isUnlimited?`<div class="stat-bar" style="margin-top:10px"><div class="stat-fill" style="width:${pct}%;background:${t.color}"></div></div>`:''}
     </div>`;
   }).join('');
 
-  const recent = allLeaves.filter(l => l.user_id === currentProfile.id).slice(0,4);
+  // Others section — maternity/paternity/unpaid collapsed
+  const otherTypes = [
+    {key:'maternity', label:'Maternity Leave', color:'#7c3aed'},
+    {key:'paternity', label:'Paternity Leave', color:'#7c3aed'},
+    {key:'unpaid',    label:'Unpaid Leave',    color:'#555'},
+    {key:'other',     label:'Other Leave',     color:'#c2780c'},
+  ];
+  const othersHtml = otherTypes.map(t => {
+    const b = myBalances.find(x => x.leave_type === t.key);
+    if(!b) return '';
+    const rem = b.total_days < 900 ? b.total_days - b.used_days : '∞';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f3;cursor:pointer" onclick="showMyLeaveType('${t.key}')">
+      <span class="badge ${t.key}" style="font-size:12px">${t.label}</span>
+      <div style="display:flex;align-items:center;gap:16px">
+        <span style="font-size:12px;color:#888">${b.used_days}d used</span>
+        <span style="font-size:14px;font-weight:700;color:${t.color}">${rem}${b.total_days<900?'d':''}</span>
+        <span style="color:#ccc">›</span>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  document.getElementById('balance-cards').innerHTML = `
+    ${balHtml}
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-size:11px">Other leave types</div>
+      ${othersHtml}
+    </div>`;
+
+  // Recent leaves — latest first
+  const recent = allLeaves
+    .filter(l => l.user_id === currentProfile.id)
+    .sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''))
+    .slice(0,5);
   document.getElementById('dash-recent').innerHTML = recent.length
     ? recent.map(l => `<tr>
         <td><span class="badge ${LEAVE_TYPES[l.leave_type]?.badge}">${LEAVE_TYPES[l.leave_type]?.label}</span></td>
@@ -847,7 +901,8 @@ function renderDashboard() {
       : `<div class="empty"><div class="empty-icon">🏢</div>Everyone is in today</div>`;
   } else {
     document.getElementById('dash-team-title').textContent = 'My upcoming leaves';
-    const upcoming = allLeaves.filter(l=>l.user_id===currentProfile.id&&l.status==='approved'&&l.start_date>=TODAY).slice(0,3);
+    const upcoming = allLeaves.filter(l=>l.user_id===currentProfile.id&&l.status==='approved'&&l.start_date>=TODAY)
+      .sort((a,b)=>a.start_date.localeCompare(b.start_date)).slice(0,3);
     teamEl.innerHTML = upcoming.length
       ? upcoming.map(l=>`<div style="padding:9px 0;border-bottom:1px solid #f5f5f3">
           <span class="badge ${LEAVE_TYPES[l.leave_type]?.badge}">${LEAVE_TYPES[l.leave_type]?.label}</span>
@@ -856,6 +911,27 @@ function renderDashboard() {
       : `<div class="empty"><div class="empty-icon">🌴</div>No upcoming approved leave</div>`;
   }
   updateDot();
+}
+
+// Click leave type card to see that type's records
+function showMyLeaveType(leaveType) {
+  navTo('my-leaves');
+  // After navigation, filter to that leave type
+  setTimeout(()=>{
+    const data = allLeaves.filter(l=>l.user_id===currentProfile.id&&l.leave_type===leaveType)
+      .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+    document.getElementById('my-leaves-body').innerHTML = data.length
+      ? data.map(l=>`<tr>
+          <td><span class="badge ${LEAVE_TYPES[l.leave_type]?.badge}">${LEAVE_TYPES[l.leave_type]?.label}</span></td>
+          <td>${fmt(l.start_date)}</td><td>${fmt(l.end_date)}</td><td>${l.days}d</td>
+          <td><span class="badge ${l.status}">${cap(l.status)}</span></td>
+          <td style="color:#888;font-size:12px">${l.manager_note||'–'}</td>
+          <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕</button>`:''} ${currentProfile.role==='manager'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div>No ${LEAVE_TYPES[leaveType]?.label||leaveType} records</div></td></tr>`;
+    // Highlight the active filter
+    document.querySelectorAll('#my-leaves-filter .chip').forEach(c=>c.classList.remove('active'));
+  }, 100);
 }
 
 // ══ APPLY ═══════════════════════════════════════════════════
@@ -1276,7 +1352,7 @@ function openEmployeeDetail(userId){
       <td style="text-align:center;font-weight:700;color:${t.color}">${total}${typeof total==='number'?'d':''}</td>
       <td style="text-align:center;color:var(--danger);font-weight:600">${used > 0 ? used+'d' : '–'}</td>
       <td style="text-align:center;font-weight:700;font-size:15px;color:${balColor}">${isUnlimited ? '∞' : balance+'d'}</td>
-      ${currentProfile.role==='manager' ? `<td><button class="btn sm" onclick="openPHCredit('${userId}','${t.key}','${t.label}',${b.total_days},${used})">➕ Credit</button></td>` : '<td></td>'}
+      ${currentProfile.role==='manager' ? `<td>${t.key==='annual'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${b.total_days},${used})">✏️ Edit</button>`:`<button class="btn sm" onclick="quickEditBalance('${userId}','${t.key}','${t.label}')">✏️</button>`}</td>` : '<td></td>'}
     </tr>`;
   }).filter(Boolean).join('');
 
@@ -1293,7 +1369,7 @@ function openEmployeeDetail(userId){
         <td style="text-align:center;font-weight:600">${l.days}d</td>
         <td><span class="badge ${l.status}" style="font-size:11px">${cap(l.status)}</span></td>
         <td style="color:#888;font-size:12px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.reason||'–'}</td>
-        <td>${currentProfile.role==='manager'?`<button class="btn sm" onclick="closeModal('modal-emp-detail');openEditLeave('${l.id}')">✏️</button>`:''}</td>
+        <td>${currentProfile.role==='manager'?`<button class="btn sm" onclick="openEditLeave('${l.id}',true)">✏️</button>`:''}</td>
       </tr>`).join('')
     : `<tr><td colspan="7"><div class="empty" style="padding:20px"><div class="empty-icon">📋</div>No leave records</div></td></tr>`;
 
@@ -1313,7 +1389,7 @@ function openEmployeeDetail(userId){
           </div>
         </div>
       </div>
-      ${currentProfile.role==='manager'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{total_days:14}).total_days},${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{used_days:0}).used_days})">🏖️ Add PH Credit</button>`:''}
+      ${currentProfile.role==='manager'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{total_days:14}).total_days},${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{used_days:0}).used_days})">✏️ Edit Annual Leave</button>`:''}
     </div>
 
     <!-- Leave balance summary table -->
@@ -1353,11 +1429,11 @@ function openPHCredit(userId, leaveType, leaveLabel, currentTotal, usedDays){
   const bal = allBalances.find(b=>b.user_id===userId&&b.leave_type===leaveType);
   phCreditData.balanceId = bal?.id;
   const u = allUsers.find(u=>u.id===userId);
-  document.getElementById('ph-credit-title').textContent = '➕ Credit ' + leaveLabel + ' — ' + (u?.name||'');
+  document.getElementById('ph-credit-title').textContent = '✏️ Edit Annual Leave — ' + (u?.name||'');
   document.getElementById('ph-credit-body').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
       <div class="card" style="padding:12px;text-align:center">
-        <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Current total</div>
+        <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Total entitlement</div>
         <div style="font-size:20px;font-weight:700;color:var(--accent)">${currentTotal}d</div>
       </div>
       <div class="card" style="padding:12px;text-align:center">
@@ -1367,6 +1443,31 @@ function openPHCredit(userId, leaveType, leaveLabel, currentTotal, usedDays){
       <div class="card" style="padding:12px;text-align:center">
         <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Balance</div>
         <div style="font-size:20px;font-weight:700;color:var(--success)">${currentTotal-usedDays}d</div>
+      </div>
+    </div>
+    <div class="notice info">ℹ️ &nbsp;Enter the number of days to <strong>add</strong> to this employee's annual leave total. Use this for public holiday substitutes or corrections.</div>`;
+  document.getElementById('ph-credit-days').value = '1';
+  document.getElementById('ph-credit-reason').value = 'Public holiday substitute day';
+  closeModal('modal-emp-detail');
+  openModal('modal-ph-credit');
+}
+function quickEditBalance(userId, leaveType, leaveLabel){
+  phCreditData = { userId, leaveType };
+  const bal = allBalances.find(b=>b.user_id===userId&&b.leave_type===leaveType);
+  phCreditData.balanceId = bal?.id;
+  const u = allUsers.find(u=>u.id===userId);
+  document.getElementById('ph-credit-title').textContent = '✏️ Edit ' + leaveLabel + ' — ' + (u?.name||'');
+  const used = bal?.used_days||0;
+  const total = bal?.total_days||0;
+  document.getElementById('ph-credit-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">
+      <div class="card" style="padding:12px;text-align:center">
+        <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Current total</div>
+        <div style="font-size:20px;font-weight:700;color:var(--accent)">${total}d</div>
+      </div>
+      <div class="card" style="padding:12px;text-align:center">
+        <div style="font-size:11px;color:#888;font-weight:600;text-transform:uppercase">Balance</div>
+        <div style="font-size:20px;font-weight:700;color:var(--success)">${total-used}d</div>
       </div>
     </div>`;
   document.getElementById('ph-credit-days').value = '1';
@@ -1397,8 +1498,7 @@ async function savePHCredit(){
   });
   await loadAllData();
   closeModal('modal-ph-credit');
-  showToast(days+'d credited to '+leaveType+' leave successfully!');
-  // Reopen employee detail
+  showToast(days+'d credited successfully!');
   openEmployeeDetail(userId);
 }
 
@@ -1440,10 +1540,14 @@ async function grantLieu(){
 
 // ══ EDIT LEAVE RECORD (HR only) ══════════════════════════════
 let editingLeaveId = null;
-function openEditLeave(id){
+let editingLeaveId = null;
+let editingLeaveUserId = null; // track which employee we came from
+
+function openEditLeave(id, fromEmpDetail=false){
   editingLeaveId = id;
   const l = allLeaves.find(x=>x.id===id);
   const u = allUsers.find(u=>u.id===l.user_id);
+  editingLeaveUserId = fromEmpDetail ? l.user_id : null;
   document.getElementById('edit-leave-body').innerHTML = `
     <div class="notice info">ℹ️ &nbsp;Editing leave record for <strong>${u?.name||'Unknown'}</strong></div>
     <div class="row">
@@ -1467,9 +1571,11 @@ function openEditLeave(id){
     <div class="row">
       <div class="form-group"><label>Days</label><input type="number" id="el-days" value="${l.days}" min="0.5" step="0.5"></div>
       <div class="form-group"><label>Reason</label><input type="text" id="el-reason" value="${l.reason||''}"></div>
-    </div>`;
+    </div>
+    <div class="form-group"><label>Manager note</label><input type="text" id="el-note" value="${l.manager_note||''}"></div>`;
   openModal('modal-edit-leave');
 }
+
 async function saveLeaveEdit(){
   const l = allLeaves.find(x=>x.id===editingLeaveId);
   const oldDays = l.days;
@@ -1480,12 +1586,13 @@ async function saveLeaveEdit(){
   const newEnd = document.getElementById('el-end').value;
   const newDays = +document.getElementById('el-days').value;
   const newReason = document.getElementById('el-reason').value;
+  const newNote = document.getElementById('el-note').value;
   await sb.from('leave_applications').update({
     leave_type:newType, status:newStatus,
     start_date:newStart, end_date:newEnd,
-    days:newDays, reason:newReason
+    days:newDays, reason:newReason, manager_note:newNote
   }).eq('id', editingLeaveId);
-  // Adjust balance if days or type changed
+  // Adjust balance if days changed
   if(oldType === newType){
     const bal = allBalances.find(b=>b.user_id===l.user_id&&b.leave_type===oldType);
     if(bal){
@@ -1495,20 +1602,31 @@ async function saveLeaveEdit(){
   }
   await loadAllData();
   closeModal('modal-edit-leave');
-  renderMyLeaves('all');
   showToast('Leave record updated.');
+  // Go back to employee detail if we came from there
+  if(editingLeaveUserId){
+    openEmployeeDetail(editingLeaveUserId);
+  } else {
+    renderMyLeaves('all');
+  }
 }
+
 async function deleteLeaveRecord(){
   if(!confirm('Permanently delete this leave record? This cannot be undone.')) return;
   const l = allLeaves.find(x=>x.id===editingLeaveId);
-  // Restore balance
-  const bal = allBalances.find(b=>b.user_id===l.user_id&&b.leave_type===l.leave_type);
+  const userId = l.user_id;
+  const bal = allBalances.find(b=>b.user_id===userId&&b.leave_type===l.leave_type);
   if(bal&&l.status==='approved') await sb.from('leave_balances').update({used_days:Math.max(0,bal.used_days-l.days)}).eq('id',bal.id);
   await sb.from('leave_applications').delete().eq('id', editingLeaveId);
   await loadAllData();
   closeModal('modal-edit-leave');
-  renderMyLeaves('all');
   showToast('Leave record deleted.');
+  // Go back to employee detail if we came from there
+  if(editingLeaveUserId){
+    openEmployeeDetail(editingLeaveUserId);
+  } else {
+    renderMyLeaves('all');
+  }
 }
 
 function updateDot(){const d=document.getElementById('approval-dot');if(!d)return;const p=allLeaves.filter(l=>l.status==='pending').length;d.style.display=p>0?'block':'none';}
