@@ -403,7 +403,7 @@ textarea{resize:vertical;min-height:80px}
         </div>
       </div>
       <div class="card">
-        <table><thead><tr><th>Name</th><th>Department</th><th>Role</th><th>Annual (rem/total)</th><th>Medical (rem/total)</th><th>Used</th><th></th></tr></thead>
+        <table><thead><tr><th>Name</th><th>Department</th><th>Role</th><th>Annual Balance</th><th>Medical Balance</th><th>Annual B/F</th><th></th></tr></thead>
         <tbody id="employees-body"></tbody></table>
       </div>
     </div>
@@ -569,7 +569,7 @@ textarea{resize:vertical;min-height:80px}
     <div id="emp-detail-body"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn" onclick="closeModal('modal-emp-detail')">Close</button>
-      <button class="btn primary" id="emp-detail-edit-btn">✏️ Edit balance</button>
+      ${currentProfile?.email==='sabrina.peh@heliograph.sg'?`<button class="btn primary" id="emp-detail-edit-btn">✏️ Edit balance</button>`:''}
     </div>
   </div>
 </div>
@@ -956,7 +956,7 @@ function showMyLeaveType(leaveType) {
           <td>${fmt(l.start_date)}</td><td>${fmt(l.end_date)}</td><td>${l.days}d</td>
           <td><span class="badge ${l.status}">${cap(l.status)}</span></td>
           <td style="color:#888;font-size:12px">${l.manager_note||'–'}</td>
-          <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕</button>`:''} ${currentProfile.role==='manager'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</td>
+          <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕</button>`:''} ${currentProfile.email==='sabrina.peh@heliograph.sg'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</td>
         </tr>`).join('')
       : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div>No ${LEAVE_TYPES[leaveType]?.label||leaveType} records</div></td></tr>`;
     // Highlight the active filter
@@ -1053,7 +1053,7 @@ function renderMyLeaves(filter){
         <td style="color:#888;font-size:12px">${approver?approver.name:'–'}</td>
         <td style="max-width:120px;color:#888">${l.manager_note||'–'}</td>
         <td>${l.mc_url?`<a href="${l.mc_url}" target="_blank" class="btn sm" style="font-size:11px">📎 View MC</a>`:'–'}</td>
-        <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕ Cancel</button>`:''} ${currentProfile.role==='manager'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</td>
+        <td>${l.status==='pending'?`<button class="btn sm danger-btn" onclick="cancelLeave('${l.id}','${l.leave_type}',${l.days})">✕ Cancel</button>`:''} ${currentProfile.email==='sabrina.peh@heliograph.sg'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</td>
       </tr>`;}).join('')
     : `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📭</div>No ${filter==='all'?'':filter+' '}leaves</div></td></tr>`;
 }
@@ -1153,7 +1153,7 @@ function renderApprovals(filter){
           ?`<button class="btn sm success-btn" onclick="openAction('${l.id}','approve')">✓ Approve</button>
             <button class="btn sm danger-btn" onclick="openAction('${l.id}','reject')">✕ Reject</button>`
           :`<span style="color:#bbb;font-size:12px">${cap(l.status)}</span>`}
-          ${currentProfile.role==='manager'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</div></td>
+          ${currentProfile.email==='sabrina.peh@heliograph.sg'?`<button class="btn sm" onclick="openEditLeave('${l.id}')">✏️</button>`:''}</div></td>
       </tr>`:'';}).join('')
     : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📬</div>No ${filter==='pending'?'pending ':''}requests assigned to you</div></td></tr>`;
 }
@@ -1191,18 +1191,22 @@ async function confirmAction(){
 // ══ EMPLOYEES ═══════════════════════════════════════════════
 function renderEmployees(){
   document.getElementById('employees-body').innerHTML=allUsers.map(u=>{
-    const annual=allBalances.find(b=>b.user_id===u.id&&b.leave_type==='annual')||{total_days:14,used_days:0};
+    const annual=allBalances.find(b=>b.user_id===u.id&&b.leave_type==='annual')||{total_days:14,used_days:0,brought_forward:0};
     const medical=allBalances.find(b=>b.user_id===u.id&&b.leave_type==='medical')||{total_days:14,used_days:0};
     const roleClass=u.role==='director'?'director':u.role;
+    const annualBal = annual.total_days - annual.used_days;
+    const medBal = medical.total_days - medical.used_days;
+    const bf = annual.brought_forward || 0;
+    const annualColor = annualBal <= 0 ? 'color:var(--danger)' : annualBal <= 3 ? 'color:#b06000' : '';
     return`<tr style="cursor:pointer" onclick="openEmployeeDetail('${u.id}')">
       <td><div style="display:flex;align-items:center;gap:8px"><div class="avatar sm">${u.initials}</div>
         <div><div style="font-weight:600">${u.name}</div><div style="font-size:11px;color:#888">${u.email}</div></div></div></td>
       <td>${u.department}</td>
       <td><span class="badge ${roleClass}">${cap(u.role)}</span></td>
-      <td>${annual.total_days-annual.used_days}/${annual.total_days}d</td>
-      <td>${medical.total_days-medical.used_days}/${medical.total_days}d</td>
-      <td>${annual.used_days+medical.used_days}d</td>
-      <td><button class="btn sm" onclick="event.stopPropagation();openEditBalance('${u.id}')">✏️ Edit</button></td>
+      <td><span style="font-weight:600;${annualColor}">${annualBal}d</span> <span style="color:#888;font-size:11px">of ${annual.total_days}d</span></td>
+      <td><span style="font-weight:600">${medBal}d</span> <span style="color:#888;font-size:11px">of ${medical.total_days}d</span></td>
+      <td>${bf > 0 ? `<span style="color:var(--success);font-weight:600">↑ ${bf}d</span>` : '–'}</td>
+      <td><button class="btn sm" onclick="event.stopPropagation();openEditBalance('${u.id}')" style="${currentProfile.email==='sabrina.peh@heliograph.sg'?'':'display:none'}">✏️ Edit</button></td>
     </tr>`;}).join('');
 }
 async function saveEmployee(){
@@ -1238,26 +1242,80 @@ async function saveEmployee(){
 function openEditBalance(userId){
   editingUserId=userId;
   const u=allUsers.find(u=>u.id===userId);
-  const annual=allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{total_days:14,used_days:0};
-  const medical=allBalances.find(b=>b.user_id===userId&&b.leave_type==='medical')||{total_days:14,used_days:0};
-  document.getElementById('edit-bal-title').textContent='Edit balance – '+u.name;
-  document.getElementById('edit-bal-body').innerHTML=`
-    <div class="row">
-      <div class="form-group"><label>Annual total (days)</label><input type="number" id="eb-a-total" value="${annual.total_days}" min="0"></div>
-      <div class="form-group"><label>Annual used</label><input type="number" id="eb-a-used" value="${annual.used_days}" min="0"></div>
-    </div>
-    <div class="row">
-      <div class="form-group"><label>Medical total (days)</label><input type="number" id="eb-m-total" value="${medical.total_days}" min="0"></div>
-      <div class="form-group"><label>Medical used</label><input type="number" id="eb-m-used" value="${medical.used_days}" min="0"></div>
+  const isSabrina = currentProfile.email === 'sabrina.peh@heliograph.sg';
+  document.getElementById('edit-bal-title').textContent='Edit Leave Balance — '+u.name;
+
+  const allLeaveTypes = [
+    {key:'annual',    label:'Annual Leave'},
+    {key:'medical',   label:'Medical Leave'},
+    {key:'childcare', label:'Childcare Leave'},
+    {key:'maternity', label:'Maternity Leave'},
+    {key:'paternity', label:'Paternity Leave'},
+    {key:'lieu',      label:'Off In Lieu'},
+    {key:'unpaid',    label:'Unpaid Leave'},
+    {key:'other',     label:'Other Leave'},
+  ];
+
+  const rows = allLeaveTypes.map(t => {
+    const b = allBalances.find(x=>x.user_id===userId&&x.leave_type===t.key);
+    if(!b) return '';
+    const bf = b.brought_forward || 0;
+    const isUnlimited = b.total_days >= 900;
+    return `<div style="background:#fafaf8;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span class="badge ${t.key}">${t.label}</span>
+        ${isSabrina ? `<button class="btn sm danger-btn" onclick="deleteLeaveType('${userId}','${t.key}','${t.label}','${b.id}')">🗑 Remove</button>` : ''}
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label>B/F from 2025</label>
+          <input type="number" id="eb-bf-${t.key}" value="${bf}" min="0" step="0.5" ${!isSabrina?'readonly style="background:#f5f5f3"':''}>
+        </div>
+        <div class="form-group">
+          <label>Total entitlement (days)</label>
+          <input type="number" id="eb-total-${t.key}" value="${isUnlimited?999:b.total_days}" min="0" step="0.5">
+        </div>
+        <div class="form-group">
+          <label>Days used</label>
+          <input type="number" id="eb-used-${t.key}" value="${b.used_days}" min="0" step="0.5" ${!isSabrina?'readonly style="background:#f5f5f3"':''}>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#888">Balance: <strong style="color:#1e6fdb">${isUnlimited?'∞':b.total_days-b.used_days+'d'}</strong></div>
     </div>`;
+  }).filter(Boolean).join('');
+
+  document.getElementById('edit-bal-body').innerHTML = rows ||
+    '<div class="empty"><div class="empty-icon">📋</div>No leave balances found</div>';
   openModal('modal-edit-bal');
 }
+
+async function deleteLeaveType(userId, leaveType, leaveLabel, balanceId){
+  if(!confirm(`Remove ${leaveLabel} from ${allUsers.find(u=>u.id===userId)?.name}? Any existing leave records for this type will remain.`)) return;
+  await sb.from('leave_balances').delete().eq('id', balanceId);
+  await loadAllData();
+  openEditBalance(userId);
+  showToast(`${leaveLabel} removed.`);
+}
+
 async function saveBalance(){
-  const annual=allBalances.find(b=>b.user_id===editingUserId&&b.leave_type==='annual');
-  const medical=allBalances.find(b=>b.user_id===editingUserId&&b.leave_type==='medical');
-  if(annual) await sb.from('leave_balances').update({total_days:+document.getElementById('eb-a-total').value,used_days:+document.getElementById('eb-a-used').value}).eq('id',annual.id);
-  if(medical) await sb.from('leave_balances').update({total_days:+document.getElementById('eb-m-total').value,used_days:+document.getElementById('eb-m-used').value}).eq('id',medical.id);
-  await loadAllData(); closeModal('modal-edit-bal'); renderEmployees(); showToast('Balance updated.');
+  const allLeaveTypes = ['annual','medical','childcare','maternity','paternity','lieu','unpaid','other'];
+  const isSabrina = currentProfile.email === 'sabrina.peh@heliograph.sg';
+  for(const key of allLeaveTypes){
+    const b = allBalances.find(x=>x.user_id===editingUserId&&x.leave_type===key);
+    if(!b) continue;
+    const totalEl = document.getElementById(`eb-total-${key}`);
+    const usedEl = document.getElementById(`eb-used-${key}`);
+    const bfEl = document.getElementById(`eb-bf-${key}`);
+    if(!totalEl) continue;
+    const updates = { total_days: +totalEl.value };
+    if(isSabrina && usedEl) updates.used_days = +usedEl.value;
+    if(isSabrina && bfEl) updates.brought_forward = +bfEl.value;
+    await sb.from('leave_balances').update(updates).eq('id', b.id);
+  }
+  await loadAllData();
+  closeModal('modal-edit-bal');
+  renderEmployees();
+  showToast('Balances updated successfully.');
 }
 
 // ══ START NEW YEAR (annual leave rollover with carry-forward cap) ══════
@@ -1351,7 +1409,8 @@ function openEmployeeDetail(userId){
   const u = allUsers.find(u=>u.id===userId);
   if(!u) return;
   document.getElementById('emp-detail-title').textContent = u.name + ' — Leave Details';
-  document.getElementById('emp-detail-edit-btn').onclick = ()=>{ closeModal('modal-emp-detail'); openEditBalance(userId); };
+  const editBtn = document.getElementById('emp-detail-edit-btn');
+  if(editBtn) editBtn.onclick = ()=>{ closeModal('modal-emp-detail'); openEditBalance(userId); };
 
   const balTypes = [
     {key:'annual',    label:'Annual Leave',    color:'#1e6fdb'},
@@ -1382,7 +1441,7 @@ function openEmployeeDetail(userId){
       <td style="text-align:center;font-weight:700;color:${t.color}">${total}${typeof total==='number'?'d':''}</td>
       <td style="text-align:center;color:var(--danger);font-weight:600">${used > 0 ? used+'d' : '–'}</td>
       <td style="text-align:center;font-weight:700;font-size:15px;color:${balColor}">${isUnlimited ? '∞' : balance+'d'}</td>
-      ${currentProfile.role==='manager' ? `<td>${t.key==='annual'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${b.total_days},${used})">✏️ Edit</button>`:`<button class="btn sm" onclick="quickEditBalance('${userId}','${t.key}','${t.label}')">✏️</button>`}</td>` : '<td></td>'}
+      ${currentProfile.email==='sabrina.peh@heliograph.sg' ? `<td>${t.key==='annual'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${b.total_days},${used})">✏️ Edit</button>`:`<button class="btn sm" onclick="quickEditBalance('${userId}','${t.key}','${t.label}')">✏️</button>`}</td>` : '<td></td>'}
     </tr>`;
   }).filter(Boolean).join('');
 
@@ -1399,7 +1458,7 @@ function openEmployeeDetail(userId){
         <td style="text-align:center;font-weight:600">${l.days}d</td>
         <td><span class="badge ${l.status}" style="font-size:11px">${cap(l.status)}</span></td>
         <td style="color:#888;font-size:12px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.reason||'–'}</td>
-        <td>${currentProfile.role==='manager'?`<button class="btn sm" onclick="openEditLeave('${l.id}',true)">✏️</button>`:''}</td>
+        <td>${currentProfile.email==='sabrina.peh@heliograph.sg'?`<button class="btn sm" onclick="openEditLeave('${l.id}',true)">✏️</button>`:''}</td>
       </tr>`).join('')
     : `<tr><td colspan="7"><div class="empty" style="padding:20px"><div class="empty-icon">📋</div>No leave records</div></td></tr>`;
 
@@ -1419,7 +1478,7 @@ function openEmployeeDetail(userId){
           </div>
         </div>
       </div>
-      ${currentProfile.role==='manager'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{total_days:14}).total_days},${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{used_days:0}).used_days})">✏️ Edit Annual Leave</button>`:''}
+      ${currentProfile.email==='sabrina.peh@heliograph.sg'?`<button class="btn sm primary" onclick="openPHCredit('${userId}','annual','Annual Leave',${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{total_days:14}).total_days},${(allBalances.find(b=>b.user_id===userId&&b.leave_type==='annual')||{used_days:0}).used_days})">✏️ Edit Annual Leave</button>`:''}
     </div>
 
     <!-- Leave balance summary table -->
