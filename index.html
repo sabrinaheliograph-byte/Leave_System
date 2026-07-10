@@ -101,6 +101,7 @@ tr:hover td{background:#fafaf8}
 .badge.rejected{background:var(--danger-bg);color:var(--danger)}
 .badge.annual{background:#e8f0fb;color:#1e6fdb}
 .badge.medical{background:#fde8f0;color:#b0296b}
+.badge.hospitalisation{background:#fee2e2;color:#dc2626}
 .badge.maternity,.badge.paternity{background:#f3e8fe;color:#7c3aed}
 .badge.unpaid{background:#f0f0ec;color:#555}
 .badge.other{background:#fdf0dd;color:#c2780c}
@@ -281,6 +282,7 @@ textarea{resize:vertical;min-height:80px}
           <select id="apply-type" onchange="updateApplyForm()">
             <option value="annual">Annual leave</option>
             <option value="medical">Medical / sick leave</option>
+            <option value="hospitalisation">Hospitalisation leave</option>
             <option value="maternity">Maternity leave</option>
             <option value="paternity">Paternity leave</option>
             <option value="childcare">Childcare leave</option>
@@ -488,12 +490,29 @@ textarea{resize:vertical;min-height:80px}
 
 <!-- MODAL: edit balance -->
 <div class="modal-backdrop" id="modal-edit-bal">
-  <div class="modal">
+  <div class="modal" style="width:600px;max-height:90vh;overflow-y:auto">
     <div class="modal-header"><div class="modal-title" id="edit-bal-title">Edit leave balance</div><button class="close-btn" onclick="closeModal('modal-edit-bal')">×</button></div>
     <div id="edit-bal-body"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+    <div style="background:#f5f5f3;border-radius:8px;padding:12px;margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:500;color:#555">➕ Add leave type:</span>
+      <select id="add-leave-type-select" style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+        <option value="">– Select type to add –</option>
+        <option value="annual">Annual Leave</option>
+        <option value="medical">Medical Leave</option>
+        <option value="hospitalisation">Hospitalisation Leave</option>
+        <option value="childcare">Childcare Leave</option>
+        <option value="maternity">Maternity Leave</option>
+        <option value="paternity">Paternity Leave</option>
+        <option value="lieu">Off In Lieu</option>
+        <option value="unpaid">Unpaid Leave</option>
+        <option value="other">Other Leave</option>
+      </select>
+      <input type="number" id="add-leave-type-days" placeholder="Days" value="14" min="0" step="0.5" style="width:80px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+      <button class="btn primary" onclick="addLeaveType()" style="white-space:nowrap">➕ Add</button>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
       <button class="btn" onclick="closeModal('modal-edit-bal')">Cancel</button>
-      <button class="btn primary" onclick="saveBalance()">Save changes</button>
+      <button class="btn primary" onclick="saveBalance()">Save all changes</button>
     </div>
   </div>
 </div>
@@ -645,17 +664,33 @@ let editingUserId = null;
 let approvalsFilter = 'pending';
 
 const LEAVE_TYPES = {
-  annual:    { label:'Annual leave',     badge:'annual',     color:'#1e6fdb' },
-  medical:   { label:'Medical leave',    badge:'medical',    color:'#b0296b' },
-  maternity: { label:'Maternity leave',  badge:'maternity',  color:'#7c3aed' },
-  paternity: { label:'Paternity leave',  badge:'paternity',  color:'#7c3aed' },
-  childcare: { label:'Childcare leave',  badge:'childcare',  color:'#0891b2' },
-  unpaid:    { label:'Unpaid leave',     badge:'unpaid',     color:'#555'    },
-  other:     { label:'Other leave',      badge:'other',      color:'#c2780c' },
-  lieu:      { label:'Off In Lieu',      badge:'lieu',       color:'#059669' },
+  annual:          { label:'Annual leave',          badge:'annual',          color:'#1e6fdb' },
+  medical:         { label:'Medical leave',         badge:'medical',         color:'#b0296b' },
+  hospitalisation: { label:'Hospitalisation leave', badge:'hospitalisation', color:'#dc2626' },
+  maternity:       { label:'Maternity leave',       badge:'maternity',       color:'#7c3aed' },
+  paternity:       { label:'Paternity leave',       badge:'paternity',       color:'#7c3aed' },
+  childcare:       { label:'Childcare leave',       badge:'childcare',       color:'#0891b2' },
+  unpaid:          { label:'Unpaid leave',          badge:'unpaid',          color:'#555'    },
+  other:           { label:'Other leave',           badge:'other',           color:'#c2780c' },
+  lieu:            { label:'Off In Lieu',           badge:'lieu',            color:'#059669' },
 };
 
-// ══ INIT ════════════════════════════════════════════════════
+// Preferred first names for greeting
+const PREFERRED_NAMES = {
+  'martin.raab@heliograph.sg':    'Martin',
+  'sabrina.peh@heliograph.sg':    'Sabrina',
+  'michael.seah@heliograph.sg':   'Michael',
+  'spareparts@heliograph.sg':     'Fanny',
+  'service_admin@heliograph.sg':  'Jing Xuan',
+  '1961yiamchoo@gmail.com':       'Yiam Choo',
+  'felix.tsen@heliograph.sg':     'Felix',
+  'bob.hermann@heliograph.sg':    'Bob',
+  'ch.tham@heliograph.sg':        'CH',
+  'alan.k@heliograph.sg':         'Alan',
+};
+function getPreferredName(profile){
+  return PREFERRED_NAMES[profile.email] || profile.name.split(' ')[0];
+}
 window.addEventListener('load', async () => {
   // Show timeout error after 15 seconds if still loading
   const loadingTimeout = setTimeout(() => {
@@ -824,7 +859,7 @@ async function render(id) {
 
 // ══ DASHBOARD ═══════════════════════════════════════════════
 function renderDashboard() {
-  document.getElementById('dash-name').textContent = currentProfile.name.split(' ')[0];
+  document.getElementById('dash-name').textContent = getPreferredName(currentProfile);
   document.getElementById('dash-year').textContent = new Date().getFullYear();
   const myBalances = allBalances.filter(b => b.user_id === currentProfile.id);
 
@@ -918,28 +953,17 @@ function renderDashboard() {
 
   const role = currentProfile.role;
   const teamEl = document.getElementById('team-today');
-  if (role === 'hr' || role === 'manager' || role === 'director') {
-    document.getElementById('dash-team-title').textContent = 'Team on leave today';
-    const onLeave = allLeaves.filter(l => l.status==='approved' && l.start_date<=TODAY && l.end_date>=TODAY && l.user_id!==currentProfile.id);
-    teamEl.innerHTML = onLeave.length
-      ? onLeave.map(l => { const u=allUsers.find(u=>u.id===l.user_id); return u?`
-          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f5f5f3">
-            <div class="avatar sm">${u.initials}</div>
-            <div><div style="font-size:13px;font-weight:600">${u.name}</div>
-            <div style="font-size:12px;color:#888">${LEAVE_TYPES[l.leave_type]?.label} · until ${fmt(l.end_date)}</div></div>
-          </div>`:''; }).join('')
-      : `<div class="empty"><div class="empty-icon">🏢</div>Everyone is in today</div>`;
-  } else {
-    document.getElementById('dash-team-title').textContent = 'My upcoming leaves';
-    const upcoming = allLeaves.filter(l=>l.user_id===currentProfile.id&&l.status==='approved'&&l.start_date>=TODAY)
-      .sort((a,b)=>a.start_date.localeCompare(b.start_date)).slice(0,3);
-    teamEl.innerHTML = upcoming.length
-      ? upcoming.map(l=>`<div style="padding:9px 0;border-bottom:1px solid #f5f5f3">
-          <span class="badge ${LEAVE_TYPES[l.leave_type]?.badge}">${LEAVE_TYPES[l.leave_type]?.label}</span>
-          <div style="font-size:12px;color:#888;margin-top:4px">${fmt(l.start_date)} – ${fmt(l.end_date)} · ${l.days}d</div>
-        </div>`).join('')
-      : `<div class="empty"><div class="empty-icon">🌴</div>No upcoming approved leave</div>`;
-  }
+  // Everyone sees who is on leave today
+  document.getElementById('dash-team-title').textContent = 'Team on leave today';
+  const onLeave = allLeaves.filter(l => l.status==='approved' && l.start_date<=TODAY && l.end_date>=TODAY && l.user_id!==currentProfile.id);
+  teamEl.innerHTML = onLeave.length
+    ? onLeave.map(l => { const u=allUsers.find(u=>u.id===l.user_id); return u?`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f5f5f3">
+          <div class="avatar sm">${u.initials}</div>
+          <div><div style="font-size:13px;font-weight:600">${u.name}</div>
+          <div style="font-size:12px;color:#888">${LEAVE_TYPES[l.leave_type]?.label} · until ${fmt(l.end_date)}</div></div>
+        </div>`:''; }).join('')
+    : `<div class="empty"><div class="empty-icon">🏢</div>Everyone is in today</div>`;
   updateDot();
 }
 
@@ -1246,14 +1270,15 @@ function openEditBalance(userId){
   document.getElementById('edit-bal-title').textContent='Edit Leave Balance — '+u.name;
 
   const allLeaveTypes = [
-    {key:'annual',    label:'Annual Leave'},
-    {key:'medical',   label:'Medical Leave'},
-    {key:'childcare', label:'Childcare Leave'},
-    {key:'maternity', label:'Maternity Leave'},
-    {key:'paternity', label:'Paternity Leave'},
-    {key:'lieu',      label:'Off In Lieu'},
-    {key:'unpaid',    label:'Unpaid Leave'},
-    {key:'other',     label:'Other Leave'},
+    {key:'annual',          label:'Annual Leave'},
+    {key:'medical',         label:'Medical Leave'},
+    {key:'hospitalisation', label:'Hospitalisation Leave'},
+    {key:'childcare',       label:'Childcare Leave'},
+    {key:'maternity',       label:'Maternity Leave'},
+    {key:'paternity',       label:'Paternity Leave'},
+    {key:'lieu',            label:'Off In Lieu'},
+    {key:'unpaid',          label:'Unpaid Leave'},
+    {key:'other',           label:'Other Leave'},
   ];
 
   const rows = allLeaveTypes.map(t => {
@@ -1286,10 +1311,42 @@ function openEditBalance(userId){
 
   document.getElementById('edit-bal-body').innerHTML = rows ||
     '<div class="empty"><div class="empty-icon">📋</div>No leave balances found</div>';
+
+  // Hide already-existing leave types from the Add dropdown
+  const existingTypes = allBalances.filter(b=>b.user_id===userId).map(b=>b.leave_type);
+  const addSelect = document.getElementById('add-leave-type-select');
+  if(addSelect){
+    Array.from(addSelect.options).forEach(opt=>{
+      if(opt.value) opt.style.display = existingTypes.includes(opt.value) ? 'none' : '';
+    });
+    addSelect.value = '';
+  }
   openModal('modal-edit-bal');
 }
 
-async function deleteLeaveType(userId, leaveType, leaveLabel, balanceId){
+async function addLeaveType(){
+  const leaveType = document.getElementById('add-leave-type-select').value;
+  const days = +document.getElementById('add-leave-type-days').value;
+  if(!leaveType){ alert('Please select a leave type.'); return; }
+  // Check if already exists
+  const exists = allBalances.find(b=>b.user_id===editingUserId&&b.leave_type===leaveType);
+  if(exists){ alert('This leave type already exists for this employee. Edit it directly above.'); return; }
+  const isUnlimited = leaveType === 'unpaid';
+  await sb.from('leave_balances').insert({
+    user_id: editingUserId,
+    leave_type: leaveType,
+    total_days: isUnlimited ? 999 : days,
+    used_days: 0,
+    brought_forward: 0
+  });
+  await loadAllData();
+  // Reset dropdown
+  document.getElementById('add-leave-type-select').value = '';
+  document.getElementById('add-leave-type-days').value = '14';
+  // Refresh the edit balance modal
+  openEditBalance(editingUserId);
+  showToast(`${LEAVE_TYPES[leaveType]?.label||leaveType} added successfully!`);
+}
   if(!confirm(`Remove ${leaveLabel} from ${allUsers.find(u=>u.id===userId)?.name}? Any existing leave records for this type will remain.`)) return;
   await sb.from('leave_balances').delete().eq('id', balanceId);
   await loadAllData();
