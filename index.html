@@ -1355,9 +1355,9 @@ async function addLeaveType(){
 }
 
 async function saveBalance(){
-  const allLeaveTypes = ['annual','medical','childcare','maternity','paternity','lieu','unpaid','other'];
-  const isSabrina = currentProfile.email === 'sabrina.peh@heliograph.sg';
-  for(const key of allLeaveTypes){
+  const balanceLeaveTypes = ['annual','medical','hospitalisation','childcare','maternity','paternity','lieu','unpaid','other'];
+  const isSabrinaEdit = currentProfile.email === 'sabrina.peh@heliograph.sg';
+  for(const key of balanceLeaveTypes){
     const b = allBalances.find(x=>x.user_id===editingUserId&&x.leave_type===key);
     if(!b) continue;
     const totalEl = document.getElementById(`eb-total-${key}`);
@@ -1365,8 +1365,8 @@ async function saveBalance(){
     const bfEl = document.getElementById(`eb-bf-${key}`);
     if(!totalEl) continue;
     const updates = { total_days: +totalEl.value };
-    if(isSabrina && usedEl) updates.used_days = +usedEl.value;
-    if(isSabrina && bfEl) updates.brought_forward = +bfEl.value;
+    if(isSabrinaEdit && usedEl) updates.used_days = +usedEl.value;
+    if(isSabrinaEdit && bfEl) updates.brought_forward = +bfEl.value;
     await sb.from('leave_balances').update(updates).eq('id', b.id);
   }
   await loadAllData();
@@ -1572,10 +1572,10 @@ function openEmployeeDetail(userId){
 let phCreditData = { userId: null, leaveType: null, balanceId: null };
 function openPHCredit(userId, leaveType, leaveLabel, currentTotal, usedDays){
   phCreditData = { userId, leaveType };
-  const bal = allBalances.find(b=>b.user_id===userId&&b.leave_type===leaveType);
-  phCreditData.balanceId = bal?.id;
-  const u = allUsers.find(u=>u.id===userId);
-  document.getElementById('ph-credit-title').textContent = '✏️ Edit Annual Leave — ' + (u?.name||'');
+  const phBal = allBalances.find(b=>b.user_id===userId&&b.leave_type===leaveType);
+  phCreditData.balanceId = phBal?.id;
+  const phUser = allUsers.find(u=>u.id===userId);
+  document.getElementById('ph-credit-title').textContent = '✏️ Edit Annual Leave — ' + (phUser?.name||'');
   document.getElementById('ph-credit-body').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
       <div class="card" style="padding:12px;text-align:center">
